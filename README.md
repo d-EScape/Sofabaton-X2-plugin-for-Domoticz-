@@ -1,4 +1,4 @@
-# Sofabaton-X2-plugin-for-Domoticz-
+# Sofabaton X2 plugin for Domoticz
 Integrates the Sofabaton X2 MQTT functionality into Domoticz
 
 The Sofabaton X2 offers two different integrations trough MQTT. Both are used by this plugin.
