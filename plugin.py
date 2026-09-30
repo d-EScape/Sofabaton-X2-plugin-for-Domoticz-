@@ -10,12 +10,12 @@
 	  The plugin creates a Domoticz devices for every activities plus a "No activity" device.
 	  Control of the activities works both ways.<br/><br/>
 	  (1) also has the ability to send key presses to the Sofabaton. In Domoticz a "Sofabaton key senders" 
-	  device is created for this purpose. If you set it to a know key name then that key is activated 
+	  device is created for this purpose. If you set it to a known key name then that key is activated 
 	  on the Sofabaton. The known activity keys (physical buttons) are in mqttkeycodes.py.
-	  Although the Sofabaton can also send keys to a specific devices i have -for now- limited 
+	  Although the Sofabaton can also send keys to a specific device i have -for now- limited 
 	  this functionality to the current activity.<br/><br/>
 	  (2) Lets the Sofabaton send prefabricated messages to MQTT. The plugin receives these messages
-	  and translates them into a configurable string that is send to a Domoticz text device.
+	  and translates them into a configurable string that is sent to a Domoticz text device.
 	  A script can then act on devicechanges and the new value.
 	  The translation must be configured in the mqttkeycodes.py KEY_CODE section to match your
 	  device_id and the key_id's you created.
