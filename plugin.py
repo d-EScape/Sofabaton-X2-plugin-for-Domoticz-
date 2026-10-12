@@ -72,6 +72,13 @@ def activity_off(unit):
 	Devices[DEVID_ACTIVITY].Units[unit].nValue = 0
 	Devices[DEVID_ACTIVITY].Units[unit].sValue = "Off"
 	Devices[DEVID_ACTIVITY].Units[unit].Update(Log=True)
+	
+def switch_acivity_workaround(activeunit): # The hub randomly stops responding to an activity list request. This work-around ensures the Domoticz devices gets set
+	for unit in Devices[DEVID_ACTIVITY].Units:
+		if unit != activeunit and Devices[DEVID_ACTIVITY].Units[unit].sValue != "off":
+			activity_off(unit)
+		elif unit == activeunit and Devices[DEVID_ACTIVITY].Units[unit].sValue != "on":
+			activity_on(unit)
 
 def manage_activities(states=None):
 	# First make sure a Domoticz device exists for every Sofabaton Activity
@@ -200,6 +207,7 @@ class BasePlugin:
 			else:
 				payload = {"data": {"activity_id": Unit,"state": "off"}}
 			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_CONTROL_DOWN, payload)
+			switch_acivity_workaround(Unit)
 		if DeviceID == DEVID_KEYSEND and Command not in ["On", "Off"]:
 			current_id = current_activity_id()
 			DomoticzEx.Log("Keycommand " + str(Command)+ " for " + str(current_id))
@@ -254,6 +262,7 @@ class BasePlugin:
 		if topic == self.TOPIC_ACTIVITY_CONTROL_UP and "activity_id" in message:
 			DomoticzEx.Status("Switched to activity: " + str(message["activity_id"]))
 			#updating status to reflect the changed activity in all Domoticz devices, not just the currect activity.
+			switch_acivity_workaround(Unit)
 			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
 		if topic == self.TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
 			manage_activities(message["data"])
