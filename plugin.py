@@ -75,7 +75,7 @@ def activity_off(unit):
 	
 def switch_acivity_workaround(activeunit): # The hub randomly stops responding to an activity list request. This work-around ensures the Domoticz devices gets set
 	for unit in Devices[DEVID_ACTIVITY].Units:
-		if unit == activeunit:
+		if unit == activeunit and Devices[DEVID_ACTIVITY].Units[unit].sValue != "on":
 			activity_on(unit)
 		elif unit != activeunit and Devices[DEVID_ACTIVITY].Units[unit].sValue != "off":
 			activity_off(unit)
@@ -185,7 +185,7 @@ class BasePlugin:
 				
 		self.TOPIC_MQTT_CONTROL_UP = f"{self.hubid}/up"
 		self.SUBSCRIPTIONS = [self.TOPIC_ACTIVITY_LIST_RESPONSE,self.TOPIC_ACTIVITY_CONTROL_UP,self.TOPIC_ACTIVITY_KEYS_LIST,self.TOPIC_MQTT_CONTROL_UP]
-	
+
 		self.mqttserveraddress = Parameters["Address"].strip()
 		self.mqttserverport = Parameters["Port"].strip()
 		self.mqttClient = MqttClientSH2(self.mqttserveraddress, self.mqttserverport, "Domoticz_Sofabaton", self.onMQTTConnected, self.onMQTTDisconnected, self.onMQTTPublish, self.onMQTTSubscribed)
@@ -246,7 +246,6 @@ class BasePlugin:
 	def onMQTTConnected(self):
 		if self.mqttClient is not None:
 			self.mqttClient.subscribe(self.SUBSCRIPTIONS)
-			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
 		
 
 	def onMQTTDisconnected(self):
@@ -254,6 +253,7 @@ class BasePlugin:
 
 	def onMQTTSubscribed(self):
 		DomoticzEx.Debug("onMQTTSubscribed")
+		self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
 		
 	def onMQTTPublish(self, topic, message): # process incoming MQTT statuses
 		DomoticzEx.Debug("onMQTTPublish called")
@@ -265,6 +265,7 @@ class BasePlugin:
 			switch_acivity_workaround(message["activity_id"])
 			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
 		if topic == self.TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
+			DomoticzEx.Log("<== Baton activity list response:" + str(message))
 			manage_activities(message["data"])
 		if topic == self.TOPIC_MQTT_CONTROL_UP:
 			handle_mqtt_command(message)
