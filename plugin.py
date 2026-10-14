@@ -1,5 +1,5 @@
 """
-<plugin key="SofabatonX2mqtt" name="Sofabaton X2 MQTT" author="ESCape" version="1.0">
+<plugin key="SofabatonX2mqtt" name="Sofabaton X2 MQTT" author="ESCape" version="1.1">
 	<description>
 	  <H2>Bidirectional Sofabaton X2 MQTT integration for Domoticz.</H2>
 	  The Sofabaton X2 offers two different integrations trough MQTT. Both are used by this plugin.<br/>
@@ -52,6 +52,7 @@ DEVID_MQTTCONTROL = "Sofabaton mqttcontrol"
 DEVID_KEYSEND = "Sofabaton keysender"
 
 def prepare_activity_unit(unit, name=None):
+	DomoticzEx.Debug("Preparing Domoticz unit for activity:" + str(unit) + " - " + str(name))
 	if DEVID_ACTIVITY not in Devices or unit not in Devices[DEVID_ACTIVITY].Units:
 		try:
 			DomoticzEx.Unit(Name=name, Unit=unit, DeviceID=DEVID_ACTIVITY, TypeName="Switch", Used=1).Create()
@@ -60,76 +61,53 @@ def prepare_activity_unit(unit, name=None):
 			DomoticzEx.Error(str(e))
 			return False
 		else:
-			DomoticzEx.Log("Create a domoticz device for sofabaton activity " + str(unit) + " named " + name)
+			DomoticzEx.Log("Created a domoticz device for sofabaton activity " + str(unit) + " named " + name)
 	return True
 	
-def activity_on(unit):
-	Devices[DEVID_ACTIVITY].Units[unit].nValue = 1
-	Devices[DEVID_ACTIVITY].Units[unit].sValue = "On"
-	Devices[DEVID_ACTIVITY].Units[unit].Update(Log=True)
-	
-def activity_off(unit):
-	Devices[DEVID_ACTIVITY].Units[unit].nValue = 0
-	Devices[DEVID_ACTIVITY].Units[unit].sValue = "Off"
-	Devices[DEVID_ACTIVITY].Units[unit].Update(Log=True)
-	
-def switch_acivity_workaround(activeunit): # The hub randomly stops responding to an activity list request. This work-around ensures the Domoticz devices gets set
-	for unit in Devices[DEVID_ACTIVITY].Units:
-		if unit == activeunit and Devices[DEVID_ACTIVITY].Units[unit].sValue != "on":
-			activity_on(unit)
-		elif unit != activeunit and Devices[DEVID_ACTIVITY].Units[unit].sValue != "off":
-			activity_off(unit)
-
-def manage_activities(states=None):
-	# First make sure a Domoticz device exists for every Sofabaton Activity
-	# Then check every existing Domoticz device for a current Sofabaton state
-	# This ensures all Domoticz devices get checked. Obsolete Devices are turned off and a warning is raised.
-	indexedstates = {}
-	everythingoff = True
-	for state in states:
-		if "activity_name" in state and "activity_id" in state:
-			prepare_activity_unit(unit=state["activity_id"], name=state["activity_name"])
-			if "state" in state and state["state"] == "on":
-				everythingoff = False
-			indexedstates[state["activity_id"]]=state
-	if everythingoff:
-		indexedstates[255] = {"activity_id":"255", "activity_name":"No activity", "state":"on"}
-		Devices[DEVID_KEYSEND].Units[1].sValue = "Off"
-		Devices[DEVID_KEYSEND].Units[1].nValue = 0
-		Devices[DEVID_KEYSEND].Units[1].Update(Log=False)
+def set_unit(device, unit, state="On"):
+	nValue = 1 if state=="On" else 0
+	if Devices[device].Units[unit].sValue != state:
+		Devices[device].Units[unit].nValue = nValue
+		Devices[device].Units[unit].sValue = state
+		Devices[device].Units[unit].Update(Log=True)
+				
+def update_active(activity=255, state="on"):
+	if activity == 255 or state == "off":
+		set_unit(DEVID_ACTIVITY,255,"On") # "No activity" activity unit
+		set_unit(DEVID_KEYSEND,1,"Off") # Media controller/mqtt sender device
+		for unit in Devices[DEVID_ACTIVITY].Units:
+			if unit != 255:
+				set_unit(DEVID_ACTIVITY,unit,"Off")
 	else:
-		indexedstates[255] = {"activity_id":"255", "activity_name":"No activity", "state":"off"}
-		Devices[DEVID_KEYSEND].Units[1].sValue = "On"
-		Devices[DEVID_KEYSEND].Units[1].nValue = 1
-		Devices[DEVID_KEYSEND].Units[1].Update(Log=False)
-	if DEVID_ACTIVITY not in Devices or 255 not in Devices[DEVID_ACTIVITY].Units:
-		DomoticzEx.Error("The [No Activity] device does not exist in Domoticz and will be (re)created. Do not remove unit 255")
-		try:
-			DomoticzEx.Unit(Name='No activity', Unit=255, DeviceID=DEVID_ACTIVITY, TypeName="Switch", Used=1).Create()
-		except Exception as e:
-			DomoticzEx.Error("Failed to create unit 255")
-			DomoticzEx.Error(e)
-	DomoticzEx.Debug("indexedstates:" + str(indexedstates))
+		set_unit(DEVID_KEYSEND,1,"On")
+		for unit in Devices[DEVID_ACTIVITY].Units:
+			if unit == activity:
+				set_unit(DEVID_ACTIVITY,unit,"On")
+			else:
+				set_unit(DEVID_ACTIVITY,unit,"Off")
+		
+def manage_activities(activities=None):
+	existing = {}
+	active = None
+	for activity in activities:
+		prepare_activity_unit(unit=activity["activity_id"], name=activity["activity_name"])
+		if activity["state"] == "on":
+			active = activity["activity_id"]
+		existing[activity["activity_id"]]=activity["activity_name"]
+	DomoticzEx.Debug("Check if activities still exist:" + str(existing))
 	for unit in Devices[DEVID_ACTIVITY].Units:
-		if unit in indexedstates:
-			if Devices[DEVID_ACTIVITY].Units[unit].sValue.lower != indexedstates[unit]["state"]:
-				if indexedstates[unit]["state"] == "on":
-					DomoticzEx.Log("Starting activity:" + str(indexedstates[unit]["activity_name"]))
-					activity_on(unit)
-				else:
-					DomoticzEx.Debug("Stopping activity:" + str(indexedstates[unit]["activity_name"]))
-					activity_off(unit)
-		else:
-			DomoticzEx.Error("Activity no longer exists (remove it manually):" + str(unit))
-			activity_off(unit)
-			
+		if not unit in existing and not unit == 255:
+			DomoticzEx.Error("Activity seems to be deleted from sofabaton: " + str(unit) + " - " + Devices[DEVID_ACTIVITY].Units[unit].Name)
+	if active:
+		update_active(activity=active, state="on")
+	else:
+		update_active(activity=255, state="off")
+	
 def current_activity_id():
 	for unit in Devices[DEVID_ACTIVITY].Units:
 		if Devices[DEVID_ACTIVITY].Units[unit].sValue == "On" and unit < 255:
 			return unit
 	return False
-		
-	
 			
 def handle_mqtt_command(commandcode):
 	DomoticzEx.Debug("Received MQTT command:" + str(commandcode))
@@ -186,6 +164,7 @@ class BasePlugin:
 		self.TOPIC_MQTT_CONTROL_UP = f"{self.hubid}/up"
 		self.SUBSCRIPTIONS = [self.TOPIC_ACTIVITY_LIST_RESPONSE,self.TOPIC_ACTIVITY_CONTROL_UP,self.TOPIC_ACTIVITY_KEYS_LIST,self.TOPIC_MQTT_CONTROL_UP]
 
+		self.knownactivitycount = None
 		self.mqttserveraddress = Parameters["Address"].strip()
 		self.mqttserverport = Parameters["Port"].strip()
 		self.mqttClient = MqttClientSH2(self.mqttserveraddress, self.mqttserverport, "Domoticz_Sofabaton", self.onMQTTConnected, self.onMQTTDisconnected, self.onMQTTPublish, self.onMQTTSubscribed)
@@ -202,18 +181,21 @@ class BasePlugin:
 		if DeviceID == DEVID_ACTIVITY:
 			if Unit == 255 and Command == "On":
 				payload = {"data": {"activity_id": 255,"state": "off"}}
+				update_active(activity=255, state="off") # opportunistically set the Unit states before confirmation from mqtt 
 			elif Command == "On":
 				payload = {"data": {"activity_id": Unit,"state": "on"}}
+				update_active(activity=Unit, state="on")
 			else:
 				payload = {"data": {"activity_id": Unit,"state": "off"}}
+				update_active(activity=Unit, state="off")
 			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_CONTROL_DOWN, payload)
-			switch_acivity_workaround(Unit)
+			
 		if DeviceID == DEVID_KEYSEND and Command not in ["On", "Off"]:
 			current_id = current_activity_id()
 			DomoticzEx.Log("Keycommand " + str(Command)+ " for " + str(current_id))
 			if current_id and Command in ACTIVITY_KEY:
 				payload = {"data": {"activity_id": current_id, "key_id": ACTIVITY_KEY[Command]}}
-				DomoticzEx.Debug("Send " + str(payload) + " to Sofabaton")
+				DomoticzEx.Debug("==> Send " + str(payload) + " to Sofabaton")
 				self.mqttClient.publishjson(self.TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL, payload)
 			else:
 				DomoticzEx.Error("No keymapping for " + Command + " on current activity=" + str(current_id))
@@ -234,7 +216,6 @@ class BasePlugin:
 		DomoticzEx.Debug("Heartbeating...")
 		if self.mqttClient is not None:
 			try:
-				# Reconnect if connection has dropped
 				if (self.mqttClient._connection is None) or (not self.mqttClient.isConnected):
 					DomoticzEx.Debug("Reconnecting")
 					self.mqttClient._open()
@@ -255,18 +236,23 @@ class BasePlugin:
 		DomoticzEx.Debug("onMQTTSubscribed")
 		self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
 		
-	def onMQTTPublish(self, topic, message): # process incoming MQTT statuses
+	def onMQTTPublish(self, topic, message):
 		DomoticzEx.Debug("onMQTTPublish called")
 		DomoticzEx.Debug("<== Baton topic:" + topic)
 		DomoticzEx.Debug("<== Baton msg:" + str(message))
 		if topic == self.TOPIC_ACTIVITY_CONTROL_UP and "activity_id" in message:
 			DomoticzEx.Status("Switched to activity: " + str(message["activity_id"]))
-			#updating status to reflect the changed activity in all Domoticz devices, not just the currect activity.
-			switch_acivity_workaround(message["activity_id"])
-			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
+			update_active(activity=message["activity_id"], state=message["state"])
 		if topic == self.TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
-			DomoticzEx.Log("<== Baton activity list response:" + str(message))
-			manage_activities(message["data"])
+			# Sofabaton now seems te send the list on every change (without request), but unreliably. 
+			# For now we are going to use only the activity_control_up messages and ignore the 
+			# list_repsonse, unless there was a obvious change in activity configuration. 
+			# The activities configuration is always checked when the plugin is restarted. 
+			DomoticzEx.Debug("<== Baton activity list response:" + str(message))
+			if message["activity_count"] != self.knownactivitycount: 
+				DomoticzEx.Debug("Change in Sofabaton activity count detected. Managing Domoticz units ...")
+				manage_activities(message["data"])
+				self.knownactivitycount = message["activity_count"]
 		if topic == self.TOPIC_MQTT_CONTROL_UP:
 			handle_mqtt_command(message)
 				  
