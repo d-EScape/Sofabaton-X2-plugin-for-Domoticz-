@@ -1,5 +1,5 @@
 """
-<plugin key="SofabatonX2mqtt" name="Sofabaton X2 MQTT" author="ESCape" version="1.1">
+<plugin key="SofabatonX2mqtt" name="Sofabaton X2 MQTT" author="ESCape" version="1.2">
 	<description>
 	  <H2>Bidirectional Sofabaton X2 MQTT integration for Domoticz.</H2>
 	  The Sofabaton X2 offers two different integrations trough MQTT. Both are used by this plugin.<br/>
@@ -46,6 +46,7 @@ import DomoticzEx
 import json
 from mqtt import MqttClientSH2
 from mqttkeycodes import *
+from datetime import datetime
 
 DEVID_ACTIVITY = "Sofabaton activity"
 DEVID_MQTTCONTROL = "Sofabaton mqttcontrol"
@@ -72,6 +73,7 @@ def set_unit(device, unit, state="On"):
 		Devices[device].Units[unit].Update(Log=True)
 				
 def update_active(activity=255, state="on"):
+	DomoticzEx.Status("Switched activity " + Devices[DEVID_ACTIVITY].Units[activity].Name + " (" + str(activity)+ ") to " + state)
 	if activity == 255 or state == "off":
 		set_unit(DEVID_ACTIVITY,255,"On") # "No activity" activity unit
 		set_unit(DEVID_KEYSEND,1,"Off") # Media controller/mqtt sender device
@@ -122,7 +124,7 @@ def handle_mqtt_command(commandcode):
 class BasePlugin:
 	mqttClient = None
 
-	def __init__(self):				 
+	def __init__(self):
 		return
 
 	def onStart(self):
@@ -141,30 +143,21 @@ class BasePlugin:
 			DomoticzEx.Unit(Name='Sofabaton key sender', Unit=1, DeviceID=DEVID_KEYSEND, Type=244, Subtype=73, Switchtype=17, Used=1).Create()
 
 		# MQTT topic templates (SOURCE https://github.com/yomonpet/ha-sofabaton-hub/blob/main/custom_components/sofabaton_hub/const.py)
-		self.TOPIC_ACTIVITY_LIST_REQUEST = f"activity/{self.hubid}/list_request"
-		self.TOPIC_ACTIVITY_LIST_RESPONSE = f"activity/{self.hubid}/list"
-		self.TOPIC_ACTIVITY_CONTROL_UP = f"activity/{self.hubid}/activity_control_up"
-		self.TOPIC_ACTIVITY_CONTROL_DOWN = f"activity/{self.hubid}/activity_control_down"
-		self.TOPIC_ACTIVITY_KEYS_REQUEST = f"activity/{self.hubid}/keys_request"
-		self.TOPIC_ACTIVITY_KEYS_LIST = f"activity/{self.hubid}/keys_list"
-		self.TOPIC_ACTIVITY_FAVORITES_REQUEST = f"activity/{self.hubid}/favorites_keys_request"
-		self.TOPIC_ACTIVITY_FAVORITES_LIST = f"activity/{self.hubid}/favorites_keys_list"
-		self.TOPIC_ACTIVITY_FAVORITES_CONTROL = f"activity/{self.hubid}/favorites_keys_control"
-		self.TOPIC_ACTIVITY_MACRO_REQUEST = f"activity/{self.hubid}/macro_keys_request"
-		self.TOPIC_ACTIVITY_MACRO_LIST = f"activity/{self.hubid}/macro_keys_list"
-		self.TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL = f"activity/{self.hubid}/keys_control"
-		self.TOPIC_ACTIVITY_MACRO_KEY_CONTROL = "activity/{self.hubid}/macro_keys_control"	
-				
-		self.TOPIC_DEVICE_LIST_REQUEST = f"device/{self.hubid}/list_request"
-		self.TOPIC_DEVICE_LIST_RESPONSE = f"device/{self.hubid}/list"
-		self.TOPIC_DEVICE_KEYS_REQUEST = f"device/{self.hubid}/keys_request"
-		self.TOPIC_DEVICE_KEYS_LIST = f"device/{self.hubid}/keys_list"
-		self.TOPIC_DEVICE_KEY_CONTROL = f"device/{self.hubid}/keys_control"	
-				
-		self.TOPIC_MQTT_CONTROL_UP = f"{self.hubid}/up"
-		self.SUBSCRIPTIONS = [self.TOPIC_ACTIVITY_LIST_RESPONSE,self.TOPIC_ACTIVITY_CONTROL_UP,self.TOPIC_ACTIVITY_KEYS_LIST,self.TOPIC_MQTT_CONTROL_UP]
+		global TOPIC_ACTIVITY_LIST_REQUEST
+		global TOPIC_ACTIVITY_LIST_RESPONSE
+		global TOPIC_ACTIVITY_CONTROL_UP
+		global TOPIC_ACTIVITY_CONTROL_DOWN
+		global TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL
+		global TOPIC_MQTT_CONTROL_UP
+		global SUBSCRIPTIONS
+		TOPIC_ACTIVITY_LIST_REQUEST = f"activity/{self.hubid}/list_request"
+		TOPIC_ACTIVITY_LIST_RESPONSE = f"activity/{self.hubid}/list"
+		TOPIC_ACTIVITY_CONTROL_UP = f"activity/{self.hubid}/activity_control_up"
+		TOPIC_ACTIVITY_CONTROL_DOWN = f"activity/{self.hubid}/activity_control_down"
+		TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL = f"activity/{self.hubid}/keys_control"	
+		TOPIC_MQTT_CONTROL_UP = f"{self.hubid}/up"
+		SUBSCRIPTIONS = [TOPIC_ACTIVITY_CONTROL_UP,TOPIC_ACTIVITY_LIST_RESPONSE,TOPIC_MQTT_CONTROL_UP]
 
-		self.knownactivitycount = None
 		self.mqttserveraddress = Parameters["Address"].strip()
 		self.mqttserverport = Parameters["Port"].strip()
 		self.mqttClient = MqttClientSH2(self.mqttserveraddress, self.mqttserverport, "Domoticz_Sofabaton", self.onMQTTConnected, self.onMQTTDisconnected, self.onMQTTPublish, self.onMQTTSubscribed)
@@ -188,7 +181,7 @@ class BasePlugin:
 			else:
 				payload = {"data": {"activity_id": Unit,"state": "off"}}
 				update_active(activity=Unit, state="off")
-			self.mqttClient.publishjson(self.TOPIC_ACTIVITY_CONTROL_DOWN, payload)
+			self.mqttClient.publishjson(TOPIC_ACTIVITY_CONTROL_DOWN, payload)
 			
 		if DeviceID == DEVID_KEYSEND and Command not in ["On", "Off"]:
 			current_id = current_activity_id()
@@ -196,7 +189,7 @@ class BasePlugin:
 			if current_id and Command in ACTIVITY_KEY:
 				payload = {"data": {"activity_id": current_id, "key_id": ACTIVITY_KEY[Command]}}
 				DomoticzEx.Debug("==> Send " + str(payload) + " to Sofabaton")
-				self.mqttClient.publishjson(self.TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL, payload)
+				self.mqttClient.publishjson(TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL, payload)
 			else:
 				DomoticzEx.Error("No keymapping for " + Command + " on current activity=" + str(current_id))
 		  
@@ -226,7 +219,7 @@ class BasePlugin:
 
 	def onMQTTConnected(self):
 		if self.mqttClient is not None:
-			self.mqttClient.subscribe(self.SUBSCRIPTIONS)
+			self.mqttClient.subscribe(SUBSCRIPTIONS)
 		
 
 	def onMQTTDisconnected(self):
@@ -234,26 +227,17 @@ class BasePlugin:
 
 	def onMQTTSubscribed(self):
 		DomoticzEx.Debug("onMQTTSubscribed")
-		self.mqttClient.publishjson(self.TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
+		self.mqttClient.publishjson(TOPIC_ACTIVITY_LIST_REQUEST, {"data": "activity_list"})
 		
 	def onMQTTPublish(self, topic, message):
 		DomoticzEx.Debug("onMQTTPublish called")
-		DomoticzEx.Debug("<== Baton topic:" + topic)
-		DomoticzEx.Debug("<== Baton msg:" + str(message))
-		if topic == self.TOPIC_ACTIVITY_CONTROL_UP and "activity_id" in message:
-			DomoticzEx.Status("Switched to activity: " + str(message["activity_id"]))
+		DomoticzEx.Log("<== Baton topic:" + topic)
+		DomoticzEx.Log("<== Baton msg:" + str(message))
+		if topic == TOPIC_ACTIVITY_CONTROL_UP and "activity_id" in message:
 			update_active(activity=message["activity_id"], state=message["state"])
-		if topic == self.TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
-			# Sofabaton now seems te send the list on every change (without request), but unreliably. 
-			# For now we are going to use only the activity_control_up messages and ignore the 
-			# list_repsonse, unless there was a obvious change in activity configuration. 
-			# The activities configuration is always checked when the plugin is restarted. 
-			DomoticzEx.Debug("<== Baton activity list response:" + str(message))
-			if message["activity_count"] != self.knownactivitycount: 
-				DomoticzEx.Debug("Change in Sofabaton activity count detected. Managing Domoticz units ...")
-				manage_activities(message["data"])
-				self.knownactivitycount = message["activity_count"]
-		if topic == self.TOPIC_MQTT_CONTROL_UP:
+		if topic == TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
+			manage_activities(message["data"])
+		if topic == TOPIC_MQTT_CONTROL_UP:
 			handle_mqtt_command(message)
 				  
 global _plugin
