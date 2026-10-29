@@ -1,5 +1,5 @@
 """
-<plugin key="SofabatonX2mqtt" name="Sofabaton X2 MQTT" author="ESCape" version="1.2">
+<plugin key="SofabatonX2mqtt" name="Sofabaton X2 MQTT" author="ESCape" version="1.3">
 	<description>
 	  <H2>Bidirectional Sofabaton X2 MQTT integration for Domoticz.</H2>
 	  The Sofabaton X2 offers two different integrations trough MQTT. Both are used by this plugin.<br/>
@@ -45,7 +45,7 @@ errmsg = ""
 import DomoticzEx
 import json
 from mqtt import MqttClientSH2
-from mqttkeycodes import *
+from mqttkeycodes import KEY_CODE, ACTIVITY_KEY
 from datetime import datetime
 
 DEVID_ACTIVITY = "Sofabaton activity"
@@ -53,16 +53,16 @@ DEVID_MQTTCONTROL = "Sofabaton mqttcontrol"
 DEVID_KEYSEND = "Sofabaton keysender"
 
 def prepare_activity_unit(unit, name=None):
-	DomoticzEx.Debug("Preparing Domoticz unit for activity:" + str(unit) + " - " + str(name))
+	DomoticzEx.Debug(f"Preparing Domoticz unit for activity: {unit} - {name}")
 	if DEVID_ACTIVITY not in Devices or unit not in Devices[DEVID_ACTIVITY].Units:
 		try:
 			DomoticzEx.Unit(Name=name, Unit=unit, DeviceID=DEVID_ACTIVITY, TypeName="Switch", Used=1).Create()
 		except Exception as e:
-			DomoticzEx.Error("Failes to create a domoticz device for sofabaton activity " + str(unit))
+			DomoticzEx.Error(f"Failed to create a domoticz device for sofabaton activity {unit}")
 			DomoticzEx.Error(str(e))
 			return False
 		else:
-			DomoticzEx.Log("Created a domoticz device for sofabaton activity " + str(unit) + " named " + name)
+			DomoticzEx.Log(f"Created a domoticz device for sofabaton activity {unit} named {name}")
 	return True
 	
 def set_unit(device, unit, state="On"):
@@ -73,7 +73,7 @@ def set_unit(device, unit, state="On"):
 		Devices[device].Units[unit].Update(Log=True)
 				
 def update_active(activity=255, state="on"):
-	DomoticzEx.Status("Switched activity " + Devices[DEVID_ACTIVITY].Units[activity].Name + " (" + str(activity)+ ") to " + state)
+	DomoticzEx.Status(f"Switched activity {Devices[DEVID_ACTIVITY].Units[activity].Name} ({activity}) to {state}")
 	if activity == 255 or state == "off":
 		set_unit(DEVID_ACTIVITY,255,"On") # "No activity" activity unit
 		set_unit(DEVID_KEYSEND,1,"Off") # Media controller/mqtt sender device
@@ -96,10 +96,10 @@ def manage_activities(activities=None):
 		if activity["state"] == "on":
 			active = activity["activity_id"]
 		existing[activity["activity_id"]]=activity["activity_name"]
-	DomoticzEx.Debug("Check if activities still exist:" + str(existing))
+	DomoticzEx.Debug(f"Check if activities still exist: {existing}")
 	for unit in Devices[DEVID_ACTIVITY].Units:
 		if not unit in existing and not unit == 255:
-			DomoticzEx.Error("Activity seems to be deleted from sofabaton: " + str(unit) + " - " + Devices[DEVID_ACTIVITY].Units[unit].Name)
+			DomoticzEx.Error(f"Activity seems to be deleted from sofabaton: {unit} - {Devices[DEVID_ACTIVITY].Units[unit].Name}")
 	if active:
 		update_active(activity=active, state="on")
 	else:
@@ -110,16 +110,18 @@ def current_activity_id():
 		if Devices[DEVID_ACTIVITY].Units[unit].sValue == "On" and unit < 255:
 			return unit
 	return False
-			
+					
 def handle_mqtt_command(commandcode):
-	DomoticzEx.Debug("Received MQTT command:" + str(commandcode))
-	try:
-		command = KEY_CODE[commandcode["device_id"]][commandcode["key_id"]]
-		DomoticzEx.Debug("Executing:" + str(command))
-		Devices[DEVID_MQTTCONTROL].Units[1].sValue = command
-		Devices[DEVID_MQTTCONTROL].Units[1].Update(Log=True)
-	except Exception as e:
-		DomoticzEx.Error("Unknown MQTT keycode" + str(commandcode))
+	DomoticzEx.Debug(f"Received MQTT command:{commandcode}")
+	dev=commandcode["device_id"]
+	key=commandcode["key_id"]
+	if dev in KEY_CODE and key in KEY_CODE[dev]:
+		command = KEY_CODE[dev][key]
+	else:
+		command = f"{dev}_{key}"
+	DomoticzEx.Debug(f"Executing:{command}")
+	Devices[DEVID_MQTTCONTROL].Units[1].sValue = command
+	Devices[DEVID_MQTTCONTROL].Units[1].Update(Log=True)
 	
 class BasePlugin:
 	mqttClient = None
@@ -170,7 +172,7 @@ class BasePlugin:
 	
 	def onCommand(self, DeviceID, Unit, Command, Level, Color):
 		DomoticzEx.Debug("onCommand called")
-		DomoticzEx.Debug("==> Send to Baton device:" + str(DeviceID) + ", unit:" + str(Unit) + " command:" + Command)
+		DomoticzEx.Debug(f"==> Send to Baton device:{DeviceID}, unit:{Unit} command:{Command}")
 		if DeviceID == DEVID_ACTIVITY:
 			if Unit == 255 and Command == "On":
 				payload = {"data": {"activity_id": 255,"state": "off"}}
@@ -185,13 +187,13 @@ class BasePlugin:
 			
 		if DeviceID == DEVID_KEYSEND and Command not in ["On", "Off"]:
 			current_id = current_activity_id()
-			DomoticzEx.Log("Keycommand " + str(Command)+ " for " + str(current_id))
+			DomoticzEx.Log(f"Keycommand {Command} for {current_id}")
 			if current_id and Command in ACTIVITY_KEY:
 				payload = {"data": {"activity_id": current_id, "key_id": ACTIVITY_KEY[Command]}}
-				DomoticzEx.Debug("==> Send " + str(payload) + " to Sofabaton")
+				DomoticzEx.Debug(f"==> Send {payload} to Sofabaton")
 				self.mqttClient.publishjson(TOPIC_ACTIVITY_ASSIGNED_KEY_CONTROL, payload)
 			else:
-				DomoticzEx.Error("No keymapping for " + Command + " on current activity=" + str(current_id))
+				DomoticzEx.Error(f"No keymapping for {Command} on current activity={current_id}")
 		  
 	def onConnect(self, Connection, Status, Description):
 		if self.mqttClient is not None:
@@ -231,13 +233,13 @@ class BasePlugin:
 		
 	def onMQTTPublish(self, topic, message):
 		DomoticzEx.Debug("onMQTTPublish called")
-		DomoticzEx.Log("<== Baton topic:" + topic)
-		DomoticzEx.Log("<== Baton msg:" + str(message))
+		DomoticzEx.Debug(f"<== Baton topic:{topic}")
+		DomoticzEx.Debug(f"<== Baton msg:{message}")
 		if topic == TOPIC_ACTIVITY_CONTROL_UP and "activity_id" in message:
 			update_active(activity=message["activity_id"], state=message["state"])
-		if topic == TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
+		elif topic == TOPIC_ACTIVITY_LIST_RESPONSE and "data" in message:
 			manage_activities(message["data"])
-		if topic == TOPIC_MQTT_CONTROL_UP:
+		elif topic == TOPIC_MQTT_CONTROL_UP:
 			handle_mqtt_command(message)
 				  
 global _plugin
@@ -270,4 +272,3 @@ def onCommand(DeviceID, Unit, Command, Level, Color):
 def onHeartbeat():
 	global _plugin
 	_plugin.onHeartbeat()
-	

@@ -1,40 +1,49 @@
-# Maps Device/Key combinations send by the Sofabaton MQTT virtual device to
-# action names in Domoticz, that will be stored in a Domoticz text device.
+# KEY_CODE maps the device_id and key_id send by Sofabaton X2 mqtt integration to
+# sensible command names in Domoticz. It must be edited to reflect your configuration. The
+# X2 creates a device_id for every mqtt integration you add and key_id's for every
+# Custom remote button you add to that device. 
+# The received commands show up as a value of the "Sofabaton MQTT Receiver" device in Domoticz.
+#
 # Example:
 # {
 #   "device_id": 8,
-#   "key_id": 1
+#   "key_id": 2
 # }
-# from Sofabaton MQTT
-# is translated to "MediawandAan"
-
+# from Sofabaton MQTT is translated to "Licht uit" in the example below.
+#
+# If a name is not configured for the device/key combination then the Domoticz device will 
+# receive the keypress as "{device_id}_{key_id}", (e.g. 8_2)
 KEY_CODE={
 	8:{
-		1:"MediawandAan",
-		2:"MediawandUit",
-		3:"Rolgordijn omhoog",
-		4:"Rolgordijn omlaag",
-		5:"Lichtaan",
-		6:"Lichtuit"
-	},
-	9:{
-		1:"Example_Task1",
-		2:"Example_Task2",
-		3:"Example_Task3",
-		4:"Example_Task4",
-		5:"Example_Task5",
-		6:"Example_Task6",
-		7:"Example_Task7",
-		8:"Example_Task8",
-		9:"Example_Task9",
-		10:"Example_Task10"
+		1:"Licht aan",
+		2:"Licht uit",
+		3:"Licht dimmer",
+		4:"Licht feller",
+		5:"LichtScene CloudyDay",
+		6:"LichtScene Movie",
+		7:"Rolgordijn lager",
+		8:"Rolgordijn hoger",
+		9:"Mediawand aan",
+		10:"Mediawand uit",
+		11:"Airco aan",
+		12:"Airco uit",
+		13:"Tuin licht aan",
+		14:"Tuin licht uit",
+		15:"Eettafel dimmer",
+		16:"Eettafel feller",
+		17:"Alles uit",
 	}
-
 }
 
-# Map remote keys te key_id's
-# Found at https://community.home-assistant.io/t/sofabaton-x2-trigger-any-command-on-the-x2-hub-from-home-assistant/969617
+# You should NOT need to edit the ACTIVITY_KEY dictionary. These codes seem to be
+# the standard codes for the hardware buttons on the remote.
+# ACTIVITY_KEY maps sensible command names in Domoticz to the key_id's of the Sofabaton X2
+# Found at https://github.com/yomonpet/ha-sofabaton-hub/blob/main/custom_components/sofabaton_hub/const.py
 ACTIVITY_KEY={
+	"up": 174,
+	"down": 178,
+	"left": 175,
+	"right": 177,
     "ok": 176,
     "back": 179,
     "home": 180,
@@ -57,7 +66,5 @@ ACTIVITY_KEY={
     "blue": 193,
     "a": 153,
     "b": 152,
-    "c": 151,
-    "onzin": 184,
-    "met Spatie": 184,
+    "c": 151
     }
